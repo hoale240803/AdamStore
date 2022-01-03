@@ -1,0 +1,14 @@
+1/ 
+
+CI_REGISTRY
+
+docker run registry.gitlab.com/lehoa08121998/adamstoreclient/main:e864d663
+
+docker run -d -p 4200:80 --name adamstoreclient 43f1a5ded2ed
+
+
+
+sudo adduser deployerclient
+HoaLGitlabRunner99123!@#
+
+su deployerclient

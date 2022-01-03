@@ -1,0 +1,24 @@
+version: "3"
+services:
+    #ui-service:
+    #    container_name: adamstoreclient
+    #    image: registry.gitlab.com/lehoa08121998/adamstoreclient/main:latest
+    #    ports: 
+    #      - "80:80"
+    adam-store-app:
+        container_name: dotnet-core5.0
+        build: .
+        ports:
+            - "5000:5000"
+        depends_on:
+            - ms-sqlserver
+        entrypoint: dotnet API.dll
+    ms-sqlserver:
+        container_name: ms-sqldb
+        image: mcr.microsoft.com/mssql/server:2019-latest
+        environment:
+          ACCEPT_EULA: "Y"
+          SA_PASSWORD: "Secret123!@#"
+          MSSQL_PID: Express
+        ports:
+           - "1433:1433"

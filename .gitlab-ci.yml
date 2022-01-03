@@ -1,0 +1,107 @@
+image: creatiwww/docker-compose:latest
+
+# services:
+#   - docker:19.03.12-dind
+
+services:
+  - docker:dind
+
+stages:
+  # - build-image
+  - build-from-cache
+  - build-docker-image
+  - build-docker-compose
+  - push-dotnet-image-to-gitlab-registry
+  - push-mssql-image-to-gitlab-registry
+  - publish
+  - deploy-to-ec2
+  - deploy-to-ec2-by-docker-compose
+  - copy-docker-compose-file-to-ec2
+
+variables:
+  CI_DOCKER_HUB_REGISTRY: $CI_DOCKERHUB_REGISTRY_USER/$CLIENT
+    # Use TLS https://docs.gitlab.com/ee/ci/docker/using_docker_build.html#tls-enabled
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  TAG_LATEST: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:latest
+  TAG_COMMIT: $CI_REGISTRY_IMAGE/$CI_COMMIT_REF_NAME:$CI_COMMIT_SHORT_SHA
+
+
+#######   PASSED
+# push-dotnet-image-to-gitlab:
+#   stage: push-dotnet-image-to-gitlab-registry
+#   script:
+#     - docker login -u $CI_GITLAB_REGISTRY_USER -p $CI_GITLAB_REGISTRY_PASSWORD $CI_GITLAB_REGISTRY
+#     - docker build -t $CI_GITLAB_REGISTRY/lehoa08121998/adamstore:latest .
+#     - docker push $CI_GITLAB_REGISTRY/lehoa08121998/adamstore:latest
+####### PASSED
+
+#########   PASSED
+build-from-cache:
+  stage: build-from-cache
+  before_script:
+    - docker login registry.gitlab.com -u "$CI_REGISTRY_USER" -p "$CI_GITLAB_TOKEN"
+  script:
+    - docker pull $CI_REGISTRY_IMAGE:latest || true
+    # - docker build --cache-from $CI_GITLAB_REGISTRY/lehoa08121998/productstorequasarclient/store:latest
+    - docker build --cache-from $CI_REGISTRY_IMAGE:latest --tag $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA --tag $CI_REGISTRY_IMAGE:latest . 
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
+    - docker push $CI_REGISTRY_IMAGE:latest
+#########   PASSED
+
+
+
+############# PASSED
+publish:
+  image: docker:latest
+  stage: publish
+  services:
+    - docker:dind
+  script:
+    - docker build -t $TAG_COMMIT -t $TAG_LATEST .
+    - docker login -u $CI_GITLAB_REGISTRY_USER -p $CI_GITLAB_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $TAG_COMMIT
+    - docker push $TAG_LATEST
+############# PASSED
+
+############# PASSED
+deploy-to-ec2:
+  image: alpine:latest
+  stage: deploy-to-ec2
+  tags:
+    - deployment
+  script:
+    - chmod og= $ID_RSA
+    - apk update && apk add openssh-client
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker login -u $CI_GITLAB_REGISTRY_USER -p $CI_GITLAB_REGISTRY_PASSWORD $CI_REGISTRY"
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker pull $TAG_LATEST"
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker container rm -f adamstore-api || true"
+    - ssh -i $ID_RSA -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_IP "docker run -d -p 5000:5000 --name adamstore-api $TAG_LATEST"
+  environment:
+    name: production
+    url: http://52.221.243.47
+  only:
+    - main
+############# PASSED
+
+######### B::::::: docker-compose
+# build-docker-compose:
+#   stage: build-docker-compose
+#   script:
+#     - docker login -u $CI_GITLAB_REGISTRY_USER -p $CI_GITLAB_REGISTRY_PASSWORD $CI_REGISTRY
+#     - echo "IMAGE_APP_TAG=$TAG_LATEST" >> .env
+#     - docker-compose build
+#     - docker-compose push
+
+
+# deploy-to-ec2-by-docker-compose:
+#   stage: deploy-to-ec2-by-docker-compose
+#   script:
+#     - eval $(ssh-agent -s)
+#     - echo "$SSH_PROD_SERVER_PRIVATE_KEY" | tr -d '\r' | ssh-add - 
+#     - docker login -u $CI_GITLAB_REGISTRY_USER -p $CI_GITLAB_REGISTRY_PASSWORD $CI_REGISTRY
+#     - echo "IMAGE_APP_TAG=$TAG_LATEST" >> .env
+#     - docker-compose -H "ssh://$SERVER_USER@$SERVER_IP" down --remove-orphans
+#     - docker-compose -H "ssh://$SERVER_USER@$SERVER_IP" pull
+#     - docker-compose -H "ssh://$SERVER_USER@$SERVER_IP" up -d
+
